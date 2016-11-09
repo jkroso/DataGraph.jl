@@ -14,13 +14,13 @@ push{T}(d::DataGraph, x::T) = begin
 end
 
 recursive_push(d::Associative, ids::Dict, x, T, id::UInt) = begin
-  haskey(ids, hash(x)) && return d
-  ids[hash(x)] = id
+  haskey(ids, object_id(x)) && return d
+  ids[object_id(x)] = id
   row = map(fieldnames(T)) do f::Symbol
     FT = fieldtype(T, f)
     fv = getfield(x, f)
     isprimitive(FT) && return fv
-    haskey(ids, hash(fv)) && return ids[hash(fv)]
+    haskey(ids, object_id(fv)) && return ids[object_id(fv)]
     fid = rand(UInt)
     d = recursive_push(d, ids, fv, FT, fid)
     fid
@@ -56,13 +56,13 @@ parse_row(dg::DataGraph, row::Tuple, id::UInt, T::Type) = begin
     end
     ccall(:jl_set_nth_field, Void, (Any, Csize_t, Any), t, i-1, fv)
   end
-  dg.identities[hash(t)] = id
+  dg.identities[object_id(t)] = id
   return t
 end
 
 assoc_in(dg::DataGraph, p::Pair) = begin
   entity = first(p.first)
-  id = get(dg.identities, hash(entity))
+  id = get(dg.identities, object_id(entity))
   recursive_assoc(dg, id, typeof(entity), drop(p.first, 1), p.second)
 end
 
