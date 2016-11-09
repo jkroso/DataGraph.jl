@@ -19,6 +19,10 @@ recursive_push(d::Associative, ids::Dict, x, T, id::UInt) = begin
   row = map(fieldnames(T)) do f::Symbol
     FT = fieldtype(T, f)
     fv = getfield(x, f)
+    if FT <: Nullable
+      FT = FT.parameters[1]
+      fv = isnull(fv) ? nothing : get(fv)
+    end
     isprimitive(FT) && return fv
     haskey(ids, object_id(fv)) && return ids[object_id(fv)]
     fid = rand(UInt)
@@ -52,9 +56,10 @@ parse_row(dg::DataGraph, row::Tuple, id::UInt, T::Type) = begin
   for (i, fv) in enumerate(row)
     FT = fieldtype(T, i)
     if !isprimitive(FT)
-      fv = parse_row(dg, get_in(dg.data, [FT, fv]), fv, FT)
+      RT = FT <: Nullable ? FT.parameters[1] : FT
+      fv = parse_row(dg, get_in(dg.data, [RT, fv]), fv, RT)
     end
-    ccall(:jl_set_nth_field, Void, (Any, Csize_t, Any), t, i-1, fv)
+    ccall(:jl_set_nth_field, Void, (Any, Csize_t, Any), t, i-1, convert(FT, fv))
   end
   dg.identities[object_id(t)] = id
   return t
@@ -62,17 +67,24 @@ end
 
 assoc_in(dg::DataGraph, p::Pair) = begin
   entity = first(p.first)
+  T = typeof(entity).name.primary
+  if T<:Nullable
+    T = typeof(entity).parameters[1]
+    entity = get(entity)
+  end
   id = get(dg.identities, object_id(entity))
-  recursive_assoc(dg, id, typeof(entity), drop(p.first, 1), p.second)
+  recursive_assoc(dg, id, T, drop(p.first, 1), p.second)
 end
 
 recursive_assoc(dg::DataGraph, id::UInt, T::DataType, path, value) = begin
   row = get_in(dg.data, [T, id])
   key = first(path)
   FT = fieldtype(T, key)
+  if FT <: Nullable FT = FT.parameters[1] end
   fi = findfirst(f->f ≡ key, fieldnames(T))
   fi > 0 || throw(KeyError(key))
   fv = row[fi]
+  if FT <: Nullable fv = isnull(fv) ? nothing : get(fv) end
   if isprimitive(FT)
     DataGraph(assoc_in(dg.data, [T, id, fi] => value), dg.identities)
   else
