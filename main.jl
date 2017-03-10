@@ -1,8 +1,8 @@
 @require "github.com/jkroso/Prospects.jl" exports...
 
-@immutable DataGraph(data=Dict{DataType,Dict{UInt,Tuple}}(),
-                     identities=Dict{UInt,UInt}(),
-                     cache=Dict{UInt,Any}())
+@struct DataGraph(data=Dict{DataType,Dict{UInt,Tuple}}(),
+                  identities=Dict{UInt,UInt}(),
+                  cache=Dict{UInt,Any}())
 
 const empty_store = Dict{UInt,Tuple}()
 
@@ -37,7 +37,7 @@ const primitive_types = [Number,AbstractString,Associative,AbstractArray,Base.Ab
 isprimitive(T::DataType) = any(P->T<:P, primitive_types)
 isprimitive(T::TypeConstructor) = isprimitive(T.body)
 
-@immutable Table{T}(dg::DataGraph, store::Dict{UInt,Tuple})
+@struct Table{T}(dg::DataGraph, store::Dict{UInt,Tuple})
 
 Base.getindex(d::DataGraph, T::Type) = Table{T}(d, get(d.data, T, empty_store))
 Base.get(d::DataGraph, T::Type, default) = d[T]

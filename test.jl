@@ -1,7 +1,7 @@
 include("main.jl")
 
-@immutable Address(street::String)
-@immutable User(name::String, address::Nullable{Address})
+@struct Address(street::String)
+@struct User(name::String, address::Nullable{Address})
 
 a = User("a", Address("b"))
 dg = push(DataGraph(), a)
