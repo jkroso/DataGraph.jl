@@ -40,8 +40,10 @@ isprimitive(T::TypeConstructor) = isprimitive(T.body)
 @immutable Table{T}(dg::DataGraph, store::Dict{UInt,Tuple})
 
 Base.getindex(d::DataGraph, T::Type) = Table{T}(d, get(d.data, T, empty_store))
+Base.get(d::DataGraph, T::Type, default) = d[T]
 Base.eltype{T}(::Table{T}) = T
 Base.length(t::Table) = length(t.store)
+Base.endof(t::Table) = length(t.store)
 Base.start(t::Table) = start(t.store)
 Base.done(t::Table, state) = done(t.store, state)
 Base.next{T}(t::Table{T}, state) = begin
