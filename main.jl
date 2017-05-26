@@ -1,4 +1,5 @@
 @require "github.com/jkroso/Prospects.jl" exports...
+import Base.Iterators: drop
 
 @struct DataGraph(data=Dict{DataType,Dict{UInt,Tuple}}(),
                   identities=Dict{UInt,UInt}(),
@@ -35,7 +36,7 @@ end
 
 const primitive_types = [Number,AbstractString,Associative,AbstractArray,Base.AbstractSet,Symbol]
 isprimitive(T::DataType) = any(P->T<:P, primitive_types)
-isprimitive(T::TypeConstructor) = isprimitive(T.body)
+isprimitive(T::UnionAll) = isprimitive(T.body)
 
 @struct Table{T}(dg::DataGraph, store::Dict{UInt,Tuple})
 
@@ -69,10 +70,10 @@ end
 
 assoc_in(dg::DataGraph, p::Pair) = begin
   entity = first(p.first)
-  T = typeof(entity).name.primary
-  if T<:Nullable
-    T = typeof(entity).parameters[1]
+  T = typeof(entity).name.wrapper
+  if T <: Nullable
     entity = get(entity)
+    T = typeof(entity)
   end
   id = get(dg.identities, object_id(entity))
   recursive_assoc(dg, id, T, drop(p.first, 1), p.second)
@@ -86,7 +87,9 @@ recursive_assoc(dg::DataGraph, id::UInt, T::DataType, path, value) = begin
   fi = findfirst(f->f ≡ key, fieldnames(T))
   fi > 0 || throw(KeyError(key))
   fv = row[fi]
-  if FT <: Nullable fv = isnull(fv) ? nothing : get(fv) end
+  if FT <: Nullable
+    fv = isnull(fv) ? nothing : get(fv)
+  end
   if isprimitive(FT)
     DataGraph(assoc_in(dg.data, [T, id, fi] => value), dg.identities)
   else
