@@ -78,11 +78,16 @@ parse_row(dg::DataGraph, row::Tuple, id::UInt, T::Type) = begin
   dg.cache[id] = t
   for (i, fv) in enumerate(row)
     FT = fieldtype(T, i)
-    if !isprimitive(FT)
-      RT = FT <: Nullable ? FT.parameters[1] : FT
-      fv = parse_row(dg, dg.data[RT][fv], fv, RT)
+    isnullable = FT <: Nullable
+    if isnullable && fv === nothing
+      ccall(:jl_set_nth_field, Void, (Any, Csize_t, Any), t, i-1, FT())
+    else
+      RT = isnullable ? FT.parameters[1] : FT
+      if !isprimitive(RT)
+        fv = parse_row(dg, dg.data[RT][fv], fv, RT)
+      end
+      ccall(:jl_set_nth_field, Void, (Any, Csize_t, Any), t, i-1, isnullable ? FT(fv) : fv)
     end
-    ccall(:jl_set_nth_field, Void, (Any, Csize_t, Any), t, i-1, convert(FT, fv))
   end
   dg.ids[object_id(t)] = id
   return t
