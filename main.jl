@@ -80,7 +80,7 @@ parse_row(dg::DataGraph, row::Tuple, id::UInt, T::Type) = begin
     FT = fieldtype(T, i)
     if !isprimitive(FT)
       RT = FT <: Nullable ? FT.parameters[1] : FT
-      fv = parse_row(dg, get_in(dg.data, [RT, fv]), fv, RT)
+      fv = parse_row(dg, dg.data[RT][fv], fv, RT)
     end
     ccall(:jl_set_nth_field, Void, (Any, Csize_t, Any), t, i-1, convert(FT, fv))
   end
