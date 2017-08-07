@@ -1,15 +1,15 @@
+@require "github.com/jkroso/Destructure.jl" @destruct
 @require "github.com/jkroso/Prospects.jl" exports...
-import Base.Iterators: drop
 
 @struct DataGraph(data=Dict{DataType,Dict{UInt,Tuple}}(),
-                  identities=Dict{UInt,UInt}(),
+                  ids=Dict{UInt,UInt}(),
                   cache=Dict{UInt,Any}())
 
 const empty_store = Dict{UInt,Tuple}()
 
 push{T}(d::DataGraph, x::T) = begin
   @assert !isprimitive(T) "why are you trying to store a primitive type?"
-  ids = copy(d.identities)
+  ids = copy(d.ids)
   data = recursive_push(d.data, ids, x, T, rand(UInt))
   DataGraph(data, ids, d.cache)
 end
@@ -43,6 +43,26 @@ isprimitive(T::UnionAll) = isprimitive(T.body)
 Base.getindex(d::DataGraph, T::Type) = Table{T}(d, get(d.data, T, empty_store))
 Base.get(d::DataGraph, T::Type, default) = d[T]
 Base.eltype{T}(::Table{T}) = T
+Base.start(d::DataGraph) = begin
+  dg_state = start(d.data)
+  done(d.data, dg_state) && return (dg_state, Any, empty_store, 0)
+  ((T, table), dg_state) = next(d.data, dg_state)
+  (dg_state, T, table, start(table))
+end
+Base.done(d::DataGraph, state) = begin
+  (dg_state, _, table, table_state) = state
+  done(d.data, dg_state) && done(table, table_state)
+end
+Base.next(d::DataGraph, state) = begin
+  (dg_state, T, table, table_state) = state
+  while done(table, table_state)
+    ((T, table), dg_state) = next(d.data, dg_state)
+    table_state = start(table)
+  end
+  ((id, row), table_state) = next(table, table_state)
+  (parse_row(d, row, id, T), (dg_state, T, table, table_state))
+end
+Base.length(d::DataGraph) = mapreduce(kv->length(kv[2]), +, 0, d.data)
 Base.length(t::Table) = length(t.store)
 Base.endof(t::Table) = length(t.store)
 Base.start(t::Table) = start(t.store)
@@ -64,24 +84,24 @@ parse_row(dg::DataGraph, row::Tuple, id::UInt, T::Type) = begin
     end
     ccall(:jl_set_nth_field, Void, (Any, Csize_t, Any), t, i-1, convert(FT, fv))
   end
-  dg.identities[object_id(t)] = id
+  dg.ids[object_id(t)] = id
   return t
 end
 
 assoc_in(dg::DataGraph, p::Pair) = begin
-  entity = first(p.first)
+  @destruct [[entity, keys...], value] = p
   T = typeof(entity).name.wrapper
   if T <: Nullable
     entity = get(entity)
     T = typeof(entity)
   end
-  id = get(dg.identities, object_id(entity))
-  recursive_assoc(dg, id, T, drop(p.first, 1), p.second)
+  id = get(dg.ids, object_id(entity))
+  recursive_assoc(dg, id, T, keys, value)
 end
 
 recursive_assoc(dg::DataGraph, id::UInt, T::DataType, path, value) = begin
+  @destruct [key, rest...] = path
   row = get_in(dg.data, [T, id])
-  key = first(path)
   FT = fieldtype(T, key)
   if FT <: Nullable FT = FT.parameters[1] end
   fi = findfirst(f->f ≡ key, fieldnames(T))
@@ -91,9 +111,9 @@ recursive_assoc(dg::DataGraph, id::UInt, T::DataType, path, value) = begin
     fv = isnull(fv) ? nothing : get(fv)
   end
   if isprimitive(FT)
-    DataGraph(assoc_in(dg.data, [T, id, fi] => value), dg.identities)
+    DataGraph(assoc_in(dg.data, [T, id, fi] => value), dg.ids)
   else
-    recursive_assoc(dg, fv, FT, drop(path, 1), value)
+    recursive_assoc(dg, fv, FT, rest, value)
   end
 end
 

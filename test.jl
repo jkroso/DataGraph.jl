@@ -18,3 +18,5 @@ dg = assoc_in(dg, [a :address :street] => "coronation")
 
 @test dg[Address]|>length == 1
 @test dg[User]|>length == 1
+@test length(dg) == 2
+@test collect(dg) == [User("Jake", Address("coronation")), Address("coronation")]
